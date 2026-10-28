@@ -1,0 +1,565 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Wolfram 14.3' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       154,          7]
+NotebookDataLength[     19353,        557]
+NotebookOptionsPosition[     17150,        512]
+NotebookOutlinePosition[     17574,        529]
+CellTagsIndexPosition[     17531,        526]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+
+Cell[CellGroupData[{
+Cell["Intersection numbers of divisors from a triangulated GTP", "Title",ExpressionUUID->"38ca571d-8f20-4439-9b1a-a4e714981d6c"],
+
+Cell["\<\
+This is a companion code for the paper \[OpenCurlyDoubleQuote]5d SCFTs and \
+Intersection Theory for Generalized Toric Threefolds\[CloseCurlyDoubleQuote] \
+by Arguz, Bourget, Bousseau, Grimminger, Schafer-Nameki, 2026. 
+
+It implements the algorithm described in Section 6. The input is a fully \
+triangulated GTP / Symington polygon, with 7-branes pulled in. It outputs the \
+intersection numbers of a basis of divisors. \
+\>", "Text",
+ CellChangeTimes->{{4.00218428086007*^9, 4.002184288650836*^9}, {
+  4.002184641341134*^9, 
+  4.002184768456469*^9}},ExpressionUUID->"5d445ad1-0263-49cf-b2f5-\
+cf7c97d295d9"],
+
+Cell["\<\
+Conventions.  
+(o) Notations follow the paper as much as possible. 
+(i) The generalized face (T-cone) swept out when the 7-brane is pulled in is \
+NOT triangulated: it is removed from the polygon and its two sides -- the cut \
+and its monodromy image -- are glued.  So the interior edges of the face must \
+not appear in the edge list, while the two sides of the cut must.  
+(ii) A brane is given as {charge, cut}, where cut = {v, ...} starts at the \
+tip v of the wedge; the other side of the wedge is cutImage[{charge,cut}].  \
+The convention is that the polygon lies counterclockwise from the cut, which \
+fixes the sign of the monodromy-invariant direction u of the E-line.  A third \
+element may be supplied, {charge, cut, u}, to override that choice.  
+(iii) Divisors are numbered by the order in which the vertices first appear \
+in the edge list, and the compact double curves by the order of their edges, \
+so the edge list can be ordered to match a desired labelling.  
+(iv) The charge {p,q} is the [p,q] of the draft, whose matrix M_[p,q] acts on \
+charges.  Its transpose acts on directions in the polygon and maps the side \
+cutImage[{charge,cut}] of the wedge onto the cut
+(v) The E-line \[ScriptL]_\[Alpha] is followed through the triangulation and \
+across the cuts.  At a compact vertex that it meets, the deformed line passes \
+on its left, or on its right when the tip of another 7-brane lies on the left \
+next to that vertex (the option \"BypassSide\" -> \"Left\" or \"Right\" \
+forces a side), and crosses the edges of the star of that vertex on that \
+side.  The choice should not matter.  \
+\>", "Text",
+ CellChangeTimes->{{4.0021848240077763`*^9, 4.002184928634344*^9}, {
+  4.0021856346004267`*^9, 
+  4.00218563773706*^9}},ExpressionUUID->"f0205cf8-f0a3-4c53-943c-\
+8093e86be7d0"],
+
+Cell["\<\
+Main entry points.
+  gtpRun[]                         \t\t\t\tdraw a GTP and do everything: \
+picture, computation, intersection numbers, TikZ code.
+  gtpRun[edges, branes]           \t\t          the same for a given GTP, \
+without the editor.
+  gtpReport[res]                                                 prints the \
+dictionaries, the \[Alpha] and \[Beta] tables and the intersection matrices.
+  gtpIntersectionTables[res]     \t         just the matrices D_i.D_j.D_k.
+  gtpPlot[res]                \t\t\t         the picture of the GTP.
+  gtpTikZ[res]                 \t\t\t        the same picture as LaTeX/TikZ \
+source.
+  gtpConsistencyChecks[res]                      geometric tests of the \
+output.\
+\>", "Text",
+ CellChangeTimes->{{4.002184985163414*^9, 
+  4.002185051771717*^9}},ExpressionUUID->"638eca27-627c-4258-a8f9-\
+5e3ca44bcdc0"],
+
+Cell[CellGroupData[{
+
+Cell["Load the package", "Section",ExpressionUUID->"0deae9fd-e049-42d2-86bf-cf6109ee8b41"],
+
+Cell["\<\
+Evaluate this initialization cell first: it loads GTPIntersections.wl from \
+the folder of this notebook.\
+\>", "Text",ExpressionUUID->"ab21f169-9bca-4f4e-9c9a-3e426ecd67d5"],
+
+Cell[BoxData[
+ RowBox[{"Get", "[", 
+  RowBox[{"FileNameJoin", "[", 
+   RowBox[{"{", 
+    RowBox[{
+     RowBox[{"NotebookDirectory", "[", "]"}], ",", " ", 
+     "\"\<GTPIntersections.wl\>\""}], "}"}], "]"}], "]"}]], "Input",
+ InitializationCell->True,
+ CellLabel->"In[2]:=",ExpressionUUID->"d96d1fcc-1df6-41fb-bee1-0f9c15143281"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["Draw a GTP and compute everything", "Section",ExpressionUUID->"1f004e3f-2fe8-4193-9b20-fe8276994697"],
+
+Cell["\<\
+gtpRun[] asks for the size of the grid and opens the editor: draw the edges \
+of the triangulation and the 7-brane cuts, then click Done.  
+It prints the input (as a command gtpRun[edges, branes] that redoes the \
+computation without the editor), the picture of the GTP, the computation, the \
+triple intersection numbers and the TikZ code of the picture, with buttons \
+that copy it.  
+Options: \"Report\" -> False (picture, intersection numbers and TikZ code \
+only), \"TikZFile\" -> \"fig.tex\" (also write the TikZ code to that file, \
+next to this notebook), \"TikZOptions\" -> {...} and \"PlotOptions\" -> {...} \
+(options of gtpTikZ and gtpPlot).\
+\>", "Text",
+ CellChangeTimes->{{4.002185667456111*^9, 
+  4.002185674135689*^9}},ExpressionUUID->"6c91ec5a-9caa-423f-9b13-\
+3210f945dd17"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"res", " ", "=", " ", 
+   RowBox[{"gtpRun", "[", "]"}]}], ";"}]], "Input",
+ CellLabel->"In[24]:=",ExpressionUUID->"c2360348-2933-449d-82b6-90cf1db57c13"],
+
+Cell["To modify the GTP just computed, reopen it in the editor:", "Text",ExpressionUUID->"7cfdba69-232f-4cad-8601-5570e34ce1ee"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"res", " ", "=", " ", 
+   RowBox[{"gtpRun", "[", 
+    RowBox[{"5", ",", " ", 
+     RowBox[{"Sequence", " ", "@@", " ", 
+      RowBox[{"res", "[", "\"\<Input\>\"", "]"}]}]}], "]"}]}], ";"}]], "Input",\
+
+ CellLabel->"In[4]:=",ExpressionUUID->"edb8945a-9ef8-4631-8821-28e1f0b5b497"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["Examples of Section 7", "Section",
+ CellChangeTimes->{{4.002185602533103*^9, 
+  4.0021856026693153`*^9}},ExpressionUUID->"180c6aa5-8f66-4e3f-bbdc-\
+688b4079a8c8"],
+
+Cell[CellGroupData[{
+
+Cell["Example 1 (Section 7.1)", "Subsection",ExpressionUUID->"ffc5524f-e23d-4b61-8ae7-ad5a185133f8"],
+
+Cell["\<\
+The input is the GTP, given as a list of edges ; and the list of 7-branes. \
+Here there is a single 7-brane, so the list contains a single element, which \
+is a pair : the first entry  {0, 1} is the charge of the brane, the second \
+one {{0, 0}, {1, -2}} is the path followed by (one side of) the cut which \
+defines the Symington polygon. \
+\>", "Text",
+ CellChangeTimes->{{4.002185385925786*^9, 
+  4.002185500329612*^9}},ExpressionUUID->"7f5c59e6-722a-427b-8bb2-\
+1587fff64718"],
+
+Cell[BoxData[{
+ RowBox[{
+  RowBox[{"gtpEx1", "=", 
+   RowBox[{"{", 
+    RowBox[{
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "0"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "1"}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "0"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"1", ",", " ", 
+         RowBox[{"-", "2"}]}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "1"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", " ", 
+         RowBox[{"-", "2"}]}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "1"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"1", ",", " ", 
+         RowBox[{"-", "2"}]}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "1"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"1", ",", " ", 
+         RowBox[{"-", "1"}]}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "1"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "2"}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "0"}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", " ", 
+         RowBox[{"-", "2"}]}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", " ", 
+         RowBox[{"-", "2"}]}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "2"}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"1", ",", " ", 
+         RowBox[{"-", "1"}]}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", " ", "2"}], "}"}]}], "}"}], ",", " ", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"1", ",", " ", 
+         RowBox[{"-", "2"}]}], "}"}], ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"1", ",", " ", 
+         RowBox[{"-", "1"}]}], "}"}]}], "}"}]}], "}"}]}], 
+  ";"}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{"braneEx1", "=", " ", 
+   RowBox[{"{", 
+    RowBox[{"{", 
+     RowBox[{
+      RowBox[{"{", 
+       RowBox[{"0", ",", " ", "1"}], "}"}], ",", " ", 
+      RowBox[{"{", 
+       RowBox[{
+        RowBox[{"{", 
+         RowBox[{"0", ",", " ", "0"}], "}"}], ",", " ", 
+        RowBox[{"{", 
+         RowBox[{"1", ",", " ", 
+          RowBox[{"-", "2"}]}], "}"}]}], "}"}]}], "}"}], "}"}]}], 
+  ";"}], "\[IndentingNewLine]", 
+ RowBox[{"gtpRun", "[", 
+  RowBox[{"gtpEx1", ",", "braneEx1"}], "]"}]}], "Input",
+ CellChangeTimes->{{4.0021853281608143`*^9, 4.00218537799016*^9}},
+ CellLabel->"In[25]:=",ExpressionUUID->"05405a40-f631-45a5-9fe0-c8214488f09e"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["SU(4)_k + 1AS + 7F (Section 7.2)", "Subsection",ExpressionUUID->"df010317-0fa4-47a7-bdba-0d6b2f6cdd1d"],
+
+Cell[BoxData[{
+ RowBox[{
+  RowBox[{"gtpSU4", "=", 
+   RowBox[{"{", 
+    RowBox[{
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "4"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "0"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "1"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "2"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "3"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "4"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "6"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "7"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "6"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "4"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "3"}], ",", "4"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "3"}], ",", "3"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "3"}], ",", "3"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "0"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "1"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "1"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "2"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "2"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "3"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "3"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "4"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "6"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "6"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "7"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"0", ",", "7"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "6"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "1"}], ",", "6"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "5"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "2"}], ",", "5"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "3"}], ",", "4"}], "}"}]}], "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "3"}], ",", "4"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{
+         RowBox[{"-", "3"}], ",", "3"}], "}"}]}], "}"}]}], "}"}]}], 
+  ";"}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{"braneSU4", "=", 
+   RowBox[{"{", 
+    RowBox[{"{", 
+     RowBox[{
+      RowBox[{"{", 
+       RowBox[{"1", ",", "1"}], "}"}], ",", 
+      RowBox[{"{", 
+       RowBox[{
+        RowBox[{"{", 
+         RowBox[{
+          RowBox[{"-", "1"}], ",", "4"}], "}"}], ",", 
+        RowBox[{"{", 
+         RowBox[{"0", ",", "0"}], "}"}]}], "}"}]}], "}"}], "}"}]}], 
+  ";"}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{"resSU4", "=", 
+   RowBox[{"gtpRun", "[", 
+    RowBox[{"gtpSU4", ",", "braneSU4", ",", 
+     RowBox[{"\"\<CurveNames\>\"", "\[Rule]", "\"\<Ends\>\""}]}], "]"}]}], 
+  ";"}]}], "Input",
+ CellChangeTimes->{{4.002185527095407*^9, 4.002185557937171*^9}},
+ CellLabel->"In[20]:=",ExpressionUUID->"84519782-47d0-4854-bf45-7375acff0ee4"]
+}, Open  ]]
+}, Open  ]]
+}, Open  ]]
+},
+WindowSize->{2538, 1032},
+WindowMargins->{{Automatic, 0}, {0, Automatic}},
+Magnification:>1.25 Inherited,
+FrontEndVersion->"13.0 for Linux x86 (64-bit) (December 2, 2021)",
+StyleDefinitions->"Default.nb",
+ExpressionUUID->"4553f5a6-bce1-4d2b-8697-441d8567c8f9"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[CellGroupData[{
+Cell[576, 22, 128, 0, 122, "Title",ExpressionUUID->"38ca571d-8f20-4439-9b1a-a4e714981d6c"],
+Cell[707, 24, 619, 12, 101, "Text",ExpressionUUID->"5d445ad1-0263-49cf-b2f5-cf7c97d295d9"],
+Cell[1329, 38, 1815, 28, 273, "Text",ExpressionUUID->"f0205cf8-f0a3-4c53-943c-8093e86be7d0"],
+Cell[3147, 68, 861, 17, 245, "Text",ExpressionUUID->"638eca27-627c-4258-a8f9-5e3ca44bcdc0"],
+Cell[CellGroupData[{
+Cell[4033, 89, 90, 0, 83, "Section",ExpressionUUID->"0deae9fd-e049-42d2-86bf-cf6109ee8b41"],
+Cell[4126, 91, 184, 3, 43, "Text",ExpressionUUID->"ab21f169-9bca-4f4e-9c9a-3e426ecd67d5"],
+Cell[4313, 96, 328, 8, 56, "Input",ExpressionUUID->"d96d1fcc-1df6-41fb-bee1-0f9c15143281",
+ InitializationCell->True]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[4678, 109, 107, 0, 83, "Section",ExpressionUUID->"1f004e3f-2fe8-4193-9b20-fe8276994697"],
+Cell[4788, 111, 803, 14, 101, "Text",ExpressionUUID->"6c91ec5a-9caa-423f-9b13-3210f945dd17"],
+Cell[5594, 127, 187, 4, 36, "Input",ExpressionUUID->"c2360348-2933-449d-82b6-90cf1db57c13"],
+Cell[5784, 133, 128, 0, 43, "Text",ExpressionUUID->"7cfdba69-232f-4cad-8601-5570e34ce1ee"],
+Cell[5915, 135, 313, 8, 36, "Input",ExpressionUUID->"edb8945a-9ef8-4631-8821-28e1f0b5b497"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[6265, 148, 168, 3, 83, "Section",ExpressionUUID->"180c6aa5-8f66-4e3f-bbdc-688b4079a8c8"],
+Cell[CellGroupData[{
+Cell[6458, 155, 100, 0, 68, "Subsection",ExpressionUUID->"ffc5524f-e23d-4b61-8ae7-ad5a185133f8"],
+Cell[6561, 157, 490, 9, 72, "Text",ExpressionUUID->"7f5c59e6-722a-427b-8bb2-1587fff64718"],
+Cell[7054, 168, 3049, 96, 88, "Input",ExpressionUUID->"05405a40-f631-45a5-9fe0-c8214488f09e"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[10140, 269, 109, 0, 68, "Subsection",ExpressionUUID->"df010317-0fa4-47a7-bdba-0d6b2f6cdd1d"],
+Cell[10252, 271, 6858, 236, 138, "Input",ExpressionUUID->"84519782-47d0-4854-bf45-7375acff0ee4"]
+}, Open  ]]
+}, Open  ]]
+}, Open  ]]
+}
+]
+*)
+
